@@ -32,6 +32,7 @@ static const char *const if_name[IF_COUNT] = {
     [IF_SD] = "sd",
     [IF_VIRTIO] = "virtio",
     [IF_XEN] = "xen",
+    [IF_EMMC] = "emmc",
 };
 
 static const int if_max_devs[IF_COUNT] = {
@@ -563,6 +564,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
     case IF_FLOPPY:
     case IF_PFLASH:
     case IF_MTD:
+    case IF_EMMC:
         break;
     case IF_VIRTIO:
         /* add virtio block device */
