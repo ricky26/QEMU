@@ -370,7 +370,7 @@ obj-arm-y += collie.o
 obj-arm-y += pl041.o lm4549.o
 
 # RaspberryPi
-obj-arm-y += raspberrypi.o bcm2708.o bcm2708_vc.o
+obj-arm-y += raspberrypi.o bcm2708.o bcm2708_vc.o bcm2708_dma.o
 
 obj-sh4-y = shix.o r2d.o sh7750.o sh7750_regnames.o tc58128.o
 obj-sh4-y += sh_timer.o sh_serial.o sh_intc.o sh_pci.o sm501.o

@@ -10,6 +10,13 @@
 #define VC_MBOX_BUTTONS	5
 #define VC_MBOX_TOUCH	6
 
+//
+// Debug flags
+//#define DEBUG_MBOX
+#define DEBUG_POWER
+#define DEBUG_FB
+//
+
 // =============================
 // Unashamedly stolen from pl110
 #include "pixel_ops.h"
@@ -171,7 +178,10 @@ static void bcm2708_vc_fb(struct bcm2708_vc *_vc,
 
 	target_phys_addr_t fbsz = pitch*_vc->fb.yres;
 	target_phys_addr_t addr = 128*1024*1024; // Currently hard-coded in kernel?
+
+#ifdef DEBUG_FB
 	printf("fb mapped to 0x%08x.\n", addr);
+#endif
 
 	_vc->fb_invalidate = 1;
 	_vc->fb.pitch = pitch;
@@ -182,14 +192,15 @@ static void bcm2708_vc_fb(struct bcm2708_vc *_vc,
 
 	bcm2708_vc_send(_vc, _chan, 0);
 
-	printf("vc fb: 0x%08x, (%dx%d@%d).\n", dma, _vc->fb.xres, _vc->fb.yres, _vc->fb.bpp);
 	qemu_console_resize(_vc->disp, _vc->fb.xres, _vc->fb.yres);
 }
 
 static void bcm2708_vc_pm_req(struct bcm2708_vc *_vc,
 		int _chan, uint32_t _msg)
 {
+#ifdef DEBUG_POWER
 	printf("vc pm req: 0x%08x.\n", _msg);
+#endif
 	bcm2708_vc_send(_vc, _chan, _msg);
 }
 
@@ -202,8 +213,10 @@ static void bcm2708_vc_msg(void *_opaque,
 	int chan = _msg & 0xf;
 	uint32_t msg = _msg &~ 0xf;
 
+#ifdef DEBUG_MBOX
 	printf("vc mbox msg: (%d, 0x%08x).\n",
 			chan, msg);
+#endif
 
 	bcm2708_mbox_pop(_mbox, _idx);
 	
