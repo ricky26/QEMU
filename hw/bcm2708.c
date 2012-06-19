@@ -20,8 +20,17 @@
 #define ST_BASE			0x3000
 #define ST_SIZE			0x1000
 
+#define GPIO_BASE		0x200000
+#define GPIO_SIZE		0x1000
+
 #define UART0_BASE	  	0x201000
 #define UART0_SIZE	  	0x1000
+
+#define SDHCI_BASE		0x300000
+#define SDHCI_SIZE		0x1000
+
+#define USB_BASE		0x980000
+#define USB_SIZE		0x100000
 
 // Weird mapping.
 #define IRQ_ARM0	(0 << 5)
@@ -36,7 +45,9 @@
 #define IRQ_MBOX	(IRQ_ARM0 + 1)
 #define IRQ_PND1	(IRQ_ARM0 + 8)
 #define IRQ_PND2	(IRQ_ARM0 + 9)
+#define IRQ_USB		(IRQ_ARM0 + 11)
 #define IRQ_UART0	(IRQ_ARM0 + 19)
+#define IRQ_SDHCI	(IRQ_ARM0 + 20)
 
 #define NR_IRQS		(32*3)
 
@@ -540,6 +551,126 @@ static void st_init(struct bcm2708_state *_state)
 }
 
 //
+// GPIO
+//
+
+#define GPIO_FSEL(x)		(0x00 + (4*(x)))
+#define GPIO_SET(x)			(0x1c + (4*(x)))
+#define GPIO_CLR(x)			(0x28 + (4*(x)))
+#define GPIO_LEV(x)			(0x34 + (4*(x)))
+#define GPIO_EDS(x)			(0x40 + (4*(x)))
+#define GPIO_REN(x)			(0x4c + (4*(x)))
+#define GPIO_FEN(x)			(0x58 + (4*(x)))
+#define GPIO_HEN(x)			(0x64 + (4*(x)))
+#define GPIO_LEN(x)			(0x70 + (4*(x)))
+#define GPIO_AREN(x)		(0x7c + (4*(x)))
+#define GPIO_AFEN(x)		(0x88 + (4*(x)))
+#define GPIO_UD(x)			(0x94 + (4*(x)))
+#define GPIO_UDCLK(x)		(0x98 + (4*(x)))
+
+static uint64_t gpio_read(void *_opaque,
+		target_phys_addr_t _addr, unsigned _sz)
+{
+    switch(_addr)
+	{
+	case GPIO_FSEL(0)...GPIO_FSEL(6):
+		break;
+
+	case GPIO_SET(0)...GPIO_SET(2):
+		break;
+
+	case GPIO_CLR(0)...GPIO_CLR(2):
+		break;
+
+	case GPIO_LEV(0)...GPIO_LEV(2):
+		break;
+
+	case GPIO_EDS(0)...GPIO_EDS(2):
+		break;
+
+	case GPIO_REN(0)...GPIO_REN(2):
+		break;
+
+	case GPIO_FEN(0)...GPIO_FEN(2):
+		break;
+
+	case GPIO_HEN(0)...GPIO_HEN(2):
+		break;
+
+	case GPIO_LEN(0)...GPIO_LEN(2):
+		break;
+
+	case GPIO_AREN(0)...GPIO_AREN(2):
+		break;
+
+	case GPIO_AFEN(0)...GPIO_AFEN(2):
+		break;
+	   
+	default:
+		hw_error("Bad read on GPIO at 0x%08x.\n", _addr);
+	}
+
+	return 0;
+}
+
+static void gpio_write(void *_opaque,
+		target_phys_addr_t _addr, uint64_t _data, unsigned _sz)
+{
+    switch(_addr)
+	{
+	case GPIO_FSEL(0)...GPIO_FSEL(6):
+		break;
+
+	case GPIO_SET(0)...GPIO_SET(2):
+		break;
+
+	case GPIO_CLR(0)...GPIO_CLR(2):
+		break;
+
+	case GPIO_LEV(0)...GPIO_LEV(2):
+		break;
+
+	case GPIO_EDS(0)...GPIO_EDS(2):
+		break;
+
+	case GPIO_REN(0)...GPIO_REN(2):
+		break;
+
+	case GPIO_FEN(0)...GPIO_FEN(2):
+		break;
+
+	case GPIO_HEN(0)...GPIO_HEN(2):
+		break;
+
+	case GPIO_LEN(0)...GPIO_LEN(2):
+		break;
+
+	case GPIO_AREN(0)...GPIO_AREN(2):
+		break;
+
+	case GPIO_AFEN(0)...GPIO_AFEN(2):
+		break;
+	   
+	default:
+		hw_error("Bad write on GPIO at 0x%08x.\n", _addr);
+	}
+}
+
+static const MemoryRegionOps gpio_ops = {
+	.read = gpio_read,
+	.write = gpio_write,
+};
+
+static void gpio_init(struct bcm2708_state *_st)
+{
+	MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(iomem, &gpio_ops,
+			_st, "bcm2708.gpio", GPIO_SIZE);
+	memory_region_add_subregion(_st->iomem,
+			GPIO_BASE, iomem);
+}
+
+//
 // BCM2708
 //
 
@@ -576,9 +707,14 @@ void bcm2708_init(struct bcm2708_state *_st, CPUState *_env, MemoryRegion *_bus)
 	// Peripherals
 	armctl_init(_st, _env);
 	st_init(_st);
+	gpio_init(_st);
 	bcm2708_vc_init(&_st->vc, _st);
 	
 	sysbus_create_simple("pl011", BCM2708_IO_BASE + UART0_BASE, _st->irqs[IRQ_UART0]);
+	sysbus_create_simple("sdhci", BCM2708_IO_BASE + SDHCI_BASE, _st->irqs[IRQ_SDHCI]);
+	sysbus_create_simple("usb_synopsys",
+			BCM2708_IO_BASE + USB_BASE,
+			_st->irqs[IRQ_USB]);
 }
 
 void bcm2708_shutdown(struct bcm2708_state *_st)

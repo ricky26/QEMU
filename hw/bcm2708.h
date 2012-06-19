@@ -65,11 +65,41 @@ struct bcm2708_vc
 	bcm2708_vc_mbox_handler mbox_handler[8];
 };
 
+// DMA structs
+
+struct bcm2708_dma;
+
+struct bcm2708_dma_cb
+{
+	uint32_t ti, source_ad, dest_ad;
+	uint32_t txfr_len, stride, nextconbk;
+};
+
+struct bcm2708_dma_channel
+{
+	struct bcm2708_dma *dma;
+	int index;
+	qemu_irq irq;
+
+	uint32_t cs, dbg;
+	target_phys_addr_t addr;
+	struct bcm2708_dma_cb cb;
+};
+
+struct bcm2708_dma
+{
+	struct bcm2708_state *parent;
+
+	uint32_t enable, sts;
+	struct bcm2708_dma_channel channel[16];
+};
+
 // bcm2708 structs
 struct bcm2708_state
 {
 	MemoryRegion *iomem;
 	struct bcm2708_vc vc;
+	struct bcm2708_dma dma;
 	
 	// ST
 	int st_count;
@@ -114,5 +144,8 @@ void bcm2708_mbox_flush(struct bcm2708_mbox *_mbox, int _idx);
 
 void bcm2708_vc_init(struct bcm2708_vc *_vc, struct bcm2708_state *_st);
 void bcm2708_vc_shutdown(struct bcm2708_vc *_vc);
+
+void bcm2708_dma_init(struct bcm2708_dma *_dma, struct bcm2708_state *_st);
+void bcm2708_dma_shutdown(struct bcm2708_dma *_dma);
 
 #endif //QEMU_BCM2708_H
