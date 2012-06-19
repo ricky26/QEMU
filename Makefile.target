@@ -194,7 +194,8 @@ qmp-commands-old.h: $(SRC_PATH)/qmp-commands.hx
 
 clean:
 	rm -f *.o *.a *~ $(PROGS) nwfpe/*.o fpu/*.o
-	rm -f *.d */*.d tcg/*.o ide/*.o 9pfs/*.o kvm/*.o
+	rm -f *.d */*.d tcg/*.o ide/*.o target-$(TARGET_ARCH)/*.o 9pfs/*.o kvm/*.o
+	rm -f hw/*.o hw/9pfs/*.o hw/ide/*.o hw/usb/*.o
 	rm -f hmp-commands.h qmp-commands-old.h gdbstub-xml.c
 ifdef CONFIG_TRACE_SYSTEMTAP
 	rm -f *.stp
