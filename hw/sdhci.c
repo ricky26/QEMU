@@ -351,7 +351,7 @@ static void sdhci_command(sdhci_state *s, uint32_t cmd)
     sdhci_set_irq(s);
 }
 
-static uint32_t sdhci_read32(void *opaque, target_phys_addr_t offset)
+static uint64_t sdhci_read(void *opaque, target_phys_addr_t offset, unsigned _sz)
 {
     sdhci_state *s = opaque;
 
@@ -418,20 +418,6 @@ static uint32_t sdhci_read32(void *opaque, target_phys_addr_t offset)
     }
 
     return 0;
-}
-
-static uint32_t sdhci_read16(void *opaque, target_phys_addr_t offset)
-{
-    uint32_t v = sdhci_read32(opaque, offset & ~0x3);
-
-    return (v >> (8 * (offset & 0x3))) & 0xffff;
-}
-
-static uint32_t sdhci_read8(void *opaque, target_phys_addr_t offset)
-{
-    uint32_t v = sdhci_read32(opaque, offset & ~0x3);
-
-    return (v >> (8 * (offset & 0x3))) & 0xff;
 }
 
 static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
@@ -525,38 +511,15 @@ static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
     }
 }
 
-static void sdhci_write32(void *opaque, target_phys_addr_t offset,
-                          uint32_t value)
+static void sdhci_write(void *opaque, target_phys_addr_t offset,
+		uint64_t value, unsigned _sz)
 {
     sdhci_write_masked(opaque, offset, value, 0xffffffff);
 }
 
-static void sdhci_write16(void *opaque, target_phys_addr_t offset,
-                          uint32_t value)
-{
-    int shift = 8 * (offset & 0x3);
-
-    sdhci_write_masked(opaque, offset & ~3, value << shift, 0xffff << shift);
-}
-
-static void sdhci_write8(void *opaque, target_phys_addr_t offset,
-                          uint32_t value)
-{
-    int shift = 8 * (offset & 0x3);
-
-    sdhci_write_masked(opaque, offset & ~3, value << shift, 0xff << shift);
-}
-
-static CPUReadMemoryFunc * const sdhci_readfn[] = {
-   sdhci_read8,
-   sdhci_read16,
-   sdhci_read32
-};
-
-static CPUWriteMemoryFunc * const sdhci_writefn[] = {
-   sdhci_write8,
-   sdhci_write16,
-   sdhci_write32
+static const MemoryRegionOps sdhci_ops = {
+	.read = sdhci_read,
+	.write = sdhci_write,
 };
 
 static void sdhci_reset(DeviceState *d)
@@ -604,13 +567,10 @@ static const VMStateDescription sdhci_vmstate = {
 
 static int sdhci_mm_init(SysBusDevice *dev)
 {
-    int iomemtype;
     sdhci_state *s = FROM_SYSBUS(sdhci_state, dev);
-
-    iomemtype = cpu_register_io_memory(sdhci_readfn,
-                                       sdhci_writefn, s,
-                                       DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, 0x200, iomemtype);
+	MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(iomem, &sdhci_ops, s, "sdhci", 0x200);
+    sysbus_init_mmio(dev, iomem);
     sysbus_init_irq(dev, &s->irq);
 
     return 0;
@@ -632,16 +592,14 @@ static int sdhci_pci_init(PCIDevice *dev)
 {
     sdhci_state *s = DO_UPCAST(sdhci_state, pcidev, dev);
     uint8_t *pci_conf = s->pcidev.config;
-    int iomemtype;
+	MemoryRegion *iomem = g_new(MemoryRegion, 1);
 
     pci_conf[PCI_CLASS_PROG] = 0x01; /* Standard Host supported DMA */
     pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin 0 */
     pci_conf[0x40] = 0x00; /* 1 slot at BAR0 */
 
-    iomemtype = cpu_register_io_memory(sdhci_readfn,
-                                       sdhci_writefn, s,
-                                       DEVICE_NATIVE_ENDIAN);
-    pci_register_bar_simple(&s->pcidev, 0, 0x100, 0, iomemtype);
+	memory_region_init_io(iomem, &sdhci_ops, s, "sdhci", 0x100);
+    pci_register_bar(&s->pcidev, 0, 0, iomem);
     s->irq = s->pcidev.irq[0];
     return 0;
 }
