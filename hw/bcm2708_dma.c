@@ -38,7 +38,7 @@
 
 //
 // Debug Flags
-#define DEBUG_DMA
+//#define DEBUG_DMA
 //#define DEBUG_DMA_DMA
 //#define DEBUG_IO
 //
