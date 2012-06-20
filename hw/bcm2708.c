@@ -61,8 +61,8 @@
 #define IRQ_GPIO(x)	(IRQ_GPIO0 + (x))
 #define IRQ_I2C0	(IRQ_ARM2 + 21)
 #define IRQ_SPI0	(IRQ_ARM2 + 22)
-#define IRQ_SDHCI	(IRQ_ARM2 + 24)
 #define IRQ_UART0	(IRQ_ARM2 + 25)
+#define IRQ_SDHCI	(IRQ_ARM2 + 30)
 
 #define NR_IRQS		(32*3)
 
@@ -934,6 +934,8 @@ void bcm2708_init(struct bcm2708_state *_st, ARMCPU *_env, MemoryRegion *_bus)
 	spi_init(_st);
 	i2c_init(_st, 0, I2C0_BASE);
 	i2c_init(_st, 1, I2C1_BASE);
+	
+	bcm2708_dma_init(&_st->dma, _st);
 	bcm2708_vc_init(&_st->vc, _st);
 	
 	sysbus_create_simple("pl011", BCM2708_IO_BASE + UART0_BASE, _st->irqs[IRQ_UART0]);

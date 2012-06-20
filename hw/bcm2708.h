@@ -89,6 +89,7 @@ struct bcm2708_dma_channel
 struct bcm2708_dma
 {
 	struct bcm2708_state *parent;
+	MemoryRegion *iomem;
 
 	uint32_t enable, sts;
 	struct bcm2708_dma_channel channel[16];
