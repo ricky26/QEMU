@@ -54,7 +54,7 @@ void framebuffer_update_display(
     src_len = src_width * rows;
 
     mem_section = memory_region_find(address_space, base, src_len);
-    if (mem_section.size != src_len || !memory_region_is_ram(mem_section.mr)) {
+    if (mem_section.size != src_len || !mem_section.mr || !memory_region_is_ram(mem_section.mr)) {
         return;
     }
     mem = mem_section.mr;
