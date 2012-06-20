@@ -402,7 +402,11 @@ static uint64_t sdhci_readl(void *opaque, target_phys_addr_t offset, unsigned si
 			}
 
 			if(s->txdone >= s->txlen)
+			{
 				s->int_status |= SDHCI_INT_DATA_END;
+				s->int_status &=~ SDHCI_INT_DATA_AVAIL
+					| SDHCI_INT_SPACE_AVAIL;
+			}
 			else if (s->transfer_mode & SDHCI_TRNS_READ)
 				s->int_status |= SDHCI_INT_DATA_AVAIL;
 			else
@@ -528,7 +532,11 @@ static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
 			}
 
 			if(s->txlen >= s->txdone)
+			{
 				s->int_status |= SDHCI_INT_DATA_END;
+				s->int_status &=~ SDHCI_INT_DATA_AVAIL
+					| SDHCI_INT_SPACE_AVAIL;
+			}
 			else if (s->transfer_mode & SDHCI_TRNS_READ)
 				s->int_status |= SDHCI_INT_DATA_AVAIL;
 			else
