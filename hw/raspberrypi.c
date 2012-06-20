@@ -5,7 +5,14 @@
 #include "arm-misc.h"
 #include "loader.h"
 
+//
+//#define OLD_BOOT
+//
+
 static struct bcm2708_state rpi_bcm2708;
+#ifndef OLD_BOOT
+static struct arm_boot_info rpi_boot;
+#endif
 
 static void rpi_init(ram_addr_t _ram_size,
 		const char *_boot_device,
@@ -14,14 +21,13 @@ static void rpi_init(ram_addr_t _ram_size,
 		const char *_initrd,
 		const char *_cpu)
 {
-	CPUState *env;
+	ARMCPU *env;
 	MemoryRegion *sysmem = get_system_memory();
 	MemoryRegion *ram = g_new(MemoryRegion, 1);
-	int ret;
 
 	if(!_cpu)
 		_cpu = "arm1176";
-	env = cpu_init(_cpu);
+	env = cpu_arm_init(_cpu);
 	
 	if(!env)
 	{
@@ -29,7 +35,8 @@ static void rpi_init(ram_addr_t _ram_size,
 		exit(1);
 	}
 	
-	memory_region_init_ram(ram, NULL, "rpi.ram", 256*1024*1024);//_ram_size);
+	memory_region_init_ram(ram, "rpi.ram", _ram_size);
+	vmstate_register_ram_global(ram);
 
 	// SDRAM is mapped in at 0x0
 	// (RAM is POP so configure it here, rather than
@@ -39,18 +46,27 @@ static void rpi_init(ram_addr_t _ram_size,
 	// Do SoC setup.
 	bcm2708_init(&rpi_bcm2708, env, sysmem);
 
+#ifdef OLD_BOOT
 	if(!_kernel)
 	{
 		fprintf(stderr, "Kernel image not specified.\n");
 		exit(1);
 	}
 
-	ret = load_image_targphys(_kernel, 0, _ram_size);
+	int ret = load_image_targphys(_kernel, 0, _ram_size);
 	if(ret < 0)
 	{
 		fprintf(stderr, "Failed to load kernel.\n");
 		exit(1);
 	}
+#else
+
+	rpi_boot.ram_size 			= _ram_size - (128*1024*1024); // TODO: parameter.
+	rpi_boot.kernel_filename 	= _kernel;
+	rpi_boot.kernel_cmdline		= _cmdline;
+	rpi_boot.initrd_filename	= _initrd;
+	arm_load_kernel(env, &rpi_boot);
+#endif
 }
 
 static QEMUMachine raspberrypi_machine = {

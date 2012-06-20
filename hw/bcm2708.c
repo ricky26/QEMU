@@ -23,6 +23,13 @@
 #define GPIO_BASE		0x200000
 #define GPIO_SIZE		0x1000
 
+#define SPI_BASE		0x204000
+#define SPI_SIZE		0x1000
+
+#define I2C0_BASE		0x205000
+#define I2C1_BASE		0x804000
+#define I2C_SIZE		0x1000
+
 #define UART0_BASE	  	0x201000
 #define UART0_SIZE	  	0x1000
 
@@ -37,17 +44,25 @@
 #define IRQ_ARM1	(1 << 5)
 #define IRQ_ARM2	(2 << 5)
 
+#define IRQ_TIMER	(IRQ_ARM0 + 0)
+#define IRQ_MBOX	(IRQ_ARM0 + 1)
+#define IRQ_BELL0	(IRQ_ARM0 + 2)
+#define IRQ_BELL1	(IRQ_ARM0 + 3)
+#define IRQ_PND1	(IRQ_ARM0 + 8)
+#define IRQ_PND2	(IRQ_ARM0 + 9)
+
 #define IRQ_TIMER0	(IRQ_ARM1 + 0)
 #define IRQ_TIMER1	(IRQ_ARM1 + 1)
 #define IRQ_TIMER2	(IRQ_ARM1 + 2)
-#define IRQ_ST		(IRQ_ARM1 + 3)
+#define IRQ_TIMER3	(IRQ_ARM1 + 3)
+#define IRQ_USB		(IRQ_ARM1 + 9)
 
-#define IRQ_MBOX	(IRQ_ARM0 + 1)
-#define IRQ_PND1	(IRQ_ARM0 + 8)
-#define IRQ_PND2	(IRQ_ARM0 + 9)
-#define IRQ_USB		(IRQ_ARM0 + 11)
-#define IRQ_UART0	(IRQ_ARM0 + 19)
-#define IRQ_SDHCI	(IRQ_ARM0 + 20)
+#define IRQ_GPIO0	(IRQ_ARM2 + 17)
+#define IRQ_GPIO(x)	(IRQ_GPIO0 + (x))
+#define IRQ_I2C0	(IRQ_ARM2 + 21)
+#define IRQ_SPI0	(IRQ_ARM2 + 22)
+#define IRQ_SDHCI	(IRQ_ARM2 + 24)
+#define IRQ_UART0	(IRQ_ARM2 + 25)
 
 #define NR_IRQS		(32*3)
 
@@ -428,7 +443,7 @@ static void armctl_mbox0_ready0(void *_opaque,
 }
 
 static void armctl_init(struct bcm2708_state *_st,
-		CPUState *_env)
+		ARMCPU *_env)
 {
 	unsigned i;
 
@@ -476,6 +491,9 @@ static void armctl_init(struct bcm2708_state *_st,
 #define ST_CYCLES	0x04
 #define ST_NEXT		0x18
 
+#define ST_INT_EXP	(1 << 3)
+#define ST_SCALE	SCALE_US
+
 static uint64_t st_read(void *_opaque,
 		target_phys_addr_t _addr, unsigned _sz)
 {
@@ -483,8 +501,11 @@ static uint64_t st_read(void *_opaque,
 
 	switch(_addr)
 	{
+	case ST_INT:
+		return state->st_int;
+		
 	case ST_CYCLES:
-		return state->st_count;
+		return qemu_get_clock_ns(vm_clock)/ST_SCALE;
 
 	default:
 		fprintf(stderr, "Outside read to System Timer at 0x%08x.\n",
@@ -502,14 +523,15 @@ static void st_write(void *_opaque,
 	switch(_addr)
 	{
 	case ST_INT:
-		qemu_irq_lower(state->irqs[IRQ_ST]);
+		state->st_int &=~ _data;
+		qemu_set_irq(state->irqs[IRQ_TIMER3], !!state->st_int);
 		break;
 
 	case ST_NEXT:
 #ifdef DEBUG_ST
 		printf("modded %u\n", (uint32_t)_data);
 #endif
-		qemu_mod_timer_ns(state->st_timer, qemu_get_clock_ns(vm_clock) + (SCALE_MS/10)*_data);
+		qemu_mod_timer_ns(state->st_timer, _data);
 		break;
 
 	default:
@@ -529,11 +551,11 @@ static void st_tick(void *_opaque)
 	struct bcm2708_state *state = _opaque;
 
 #ifdef DEBUG_ST
-	printf("%s: %d, %d.\n", __func__,
-			state->st_count, state->st_next);
+	printf("%s.\n", __func__);
 #endif
 
-	qemu_irq_raise(state->irqs[IRQ_ST]);
+	state->st_int |= ST_INT_EXP;
+	qemu_irq_raise(state->irqs[IRQ_TIMER3]);
 }
 
 static void st_init(struct bcm2708_state *_state)
@@ -545,9 +567,7 @@ static void st_init(struct bcm2708_state *_state)
 	memory_region_add_subregion(_state->iomem,
 			ST_BASE, stmem);
 
-	_state->st_count = 0;
-	_state->st_next = 0;
-	_state->st_timer = qemu_new_timer(vm_clock, 10*SCALE_MS, st_tick, _state);
+	_state->st_timer = qemu_new_timer(vm_clock, ST_SCALE, st_tick, _state);
 }
 
 //
@@ -671,6 +691,209 @@ static void gpio_init(struct bcm2708_state *_st)
 }
 
 //
+// SPI
+//
+
+#define SPI_CS		0x00
+#define SPI_FIFO	0x04
+#define SPI_CLK		0x08
+#define SPI_DLEN	0x0c
+#define SPI_LTOH	0x10
+#define SPI_DC		0x14
+
+static uint64_t spi_read(void *_opaque,
+		target_phys_addr_t _addr, unsigned _sz)
+{
+	switch(_addr)
+	{
+	case SPI_CS:
+		break;
+
+	case SPI_FIFO:
+		break;
+
+	case SPI_CLK:
+		break;
+
+	case SPI_DLEN:
+		break;
+
+	case SPI_LTOH:
+		break;
+
+	case SPI_DC:
+		break;
+
+	default:
+		hw_error("Bad read on SPI at 0x%08x.\n", _addr);
+	}
+
+	return 0;
+}
+
+static void spi_write(void *_opaque,
+		target_phys_addr_t _addr, uint64_t _data, unsigned _sz)
+{
+	switch(_addr)
+	{
+	case SPI_CS:
+		break;
+
+	case SPI_FIFO:
+		break;
+
+	case SPI_CLK:
+		break;
+
+	case SPI_DLEN:
+		break;
+
+	case SPI_LTOH:
+		break;
+
+	case SPI_DC:
+		break;
+
+	default:
+		hw_error("Bad write to SPI at 0x%08x.\n", _addr);
+	}
+}
+
+static const MemoryRegionOps spi_ops = {
+	.read = spi_read,
+	.write = spi_write,
+};
+
+static void spi_init(struct bcm2708_state *_st)
+{
+	MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(iomem, &spi_ops, _st, "bcm2708.spi", SPI_SIZE);
+	memory_region_add_subregion(_st->iomem, SPI_BASE, iomem);
+}
+
+//
+// I2C
+//
+
+#define I2C_C		0x00
+#define I2C_S		0x04
+#define I2C_DLEN	0x08
+#define I2C_A		0x0c
+#define I2C_FIFO	0x10
+#define I2C_DIV		0x14
+#define I2C_DEL		0x18
+#define I2C_CLKT	0x1c
+
+static uint64_t i2c_read(void *_opaque,
+		target_phys_addr_t _addr, unsigned _sz)
+{
+	switch(_addr)
+	{
+	case I2C_C:
+		break;
+
+	case I2C_S:
+		break;
+
+	case I2C_DLEN:
+		break;
+
+	case I2C_A:
+		break;
+
+	case I2C_FIFO:
+		break;
+
+	case I2C_DIV:
+		break;
+
+	case I2C_DEL:
+		break;
+
+	case I2C_CLKT:
+		break;
+
+	default:
+		hw_error("Bad read on I2C at 0x%08x.\n", _addr);
+	}
+
+	return 0;
+}
+
+static void i2c_write(void *_opaque,
+		target_phys_addr_t _addr, uint64_t _data, unsigned _sz)
+{
+	switch(_addr)
+	{
+	case I2C_C:
+		break;
+
+	case I2C_S:
+		break;
+
+	case I2C_DLEN:
+		break;
+
+	case I2C_A:
+		break;
+
+	case I2C_FIFO:
+		break;
+
+	case I2C_DIV:
+		break;
+
+	case I2C_DEL:
+		break;
+
+	case I2C_CLKT:
+		break;
+
+	default:
+		hw_error("Bad write to I2C at 0x%08x.\n", _addr);
+	}
+}
+
+static const MemoryRegionOps i2c_ops = {
+	.read = i2c_read,
+	.write = i2c_write,
+};
+
+static void i2c_init(struct bcm2708_state *_st, int _idx, target_phys_addr_t _base)
+{
+	MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(iomem, &i2c_ops, _st, "bcm2708.i2c", I2C_SIZE);
+	memory_region_add_subregion(_st->iomem, _base, iomem);
+}
+
+//
+// SDHCI PHY
+//
+
+static uint64_t sdhci_read(void *_opaque,
+		target_phys_addr_t _addr, unsigned _sz)
+{
+	return 0;
+}
+
+static void sdhci_write(void *_opaque,
+		target_phys_addr_t _addr, uint64_t _data, unsigned _sz)
+{
+}
+
+static const MemoryRegionOps sdhci_ops = {
+	.read = sdhci_read,
+	.write = sdhci_write,
+};
+
+static void sdhci_phy_init(struct bcm2708_state *_st)
+{
+	MemoryRegion *iomem = g_new(MemoryRegion, 1);
+	memory_region_init_io(iomem, &sdhci_ops, _st, "bcm2708.sdhci", 0x90);
+	memory_region_add_subregion(_st->iomem, SDHCI_BASE+0x70, iomem);
+}
+
+//
 // BCM2708
 //
 
@@ -695,7 +918,7 @@ static const MemoryRegionOps bcm2708_io_ops = {
 	.write = bcm2708_io_write,
 };
 
-void bcm2708_init(struct bcm2708_state *_st, CPUState *_env, MemoryRegion *_bus)
+void bcm2708_init(struct bcm2708_state *_st, ARMCPU *_env, MemoryRegion *_bus)
 {
 	// IO memory
 	_st->iomem = g_new(MemoryRegion, 1);
@@ -708,6 +931,9 @@ void bcm2708_init(struct bcm2708_state *_st, CPUState *_env, MemoryRegion *_bus)
 	armctl_init(_st, _env);
 	st_init(_st);
 	gpio_init(_st);
+	spi_init(_st);
+	i2c_init(_st, 0, I2C0_BASE);
+	i2c_init(_st, 1, I2C1_BASE);
 	bcm2708_vc_init(&_st->vc, _st);
 	
 	sysbus_create_simple("pl011", BCM2708_IO_BASE + UART0_BASE, _st->irqs[IRQ_UART0]);
@@ -715,6 +941,8 @@ void bcm2708_init(struct bcm2708_state *_st, CPUState *_env, MemoryRegion *_bus)
 	sysbus_create_simple("usb_synopsys",
 			BCM2708_IO_BASE + USB_BASE,
 			_st->irqs[IRQ_USB]);
+
+	sdhci_phy_init(_st);
 }
 
 void bcm2708_shutdown(struct bcm2708_state *_st)

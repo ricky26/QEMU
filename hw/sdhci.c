@@ -351,7 +351,7 @@ static void sdhci_command(sdhci_state *s, uint32_t cmd)
     sdhci_set_irq(s);
 }
 
-static uint64_t sdhci_read(void *opaque, target_phys_addr_t offset, unsigned _sz)
+static uint64_t sdhci_readl(void *opaque, target_phys_addr_t offset)
 {
     sdhci_state *s = opaque;
 
@@ -418,6 +418,15 @@ static uint64_t sdhci_read(void *opaque, target_phys_addr_t offset, unsigned _sz
     }
 
     return 0;
+}
+
+static uint64_t sdhci_read(void *_opaque,
+		target_phys_addr_t _offset, unsigned _sz)
+{
+	int off = (_offset & 3);
+	uint64_t data = sdhci_readl(_opaque, _offset &~ 3);
+	
+	return data >> (off << 3);
 }
 
 static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
@@ -514,7 +523,10 @@ static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
 static void sdhci_write(void *opaque, target_phys_addr_t offset,
 		uint64_t value, unsigned _sz)
 {
-    sdhci_write_masked(opaque, offset, value, 0xffffffff);
+	int off = (offset & 3)*8;
+	offset &=~ 3;
+
+    sdhci_write_masked(opaque, offset, value, ((1 << _sz)-1) << off);
 }
 
 static const MemoryRegionOps sdhci_ops = {
@@ -576,16 +588,26 @@ static int sdhci_mm_init(SysBusDevice *dev)
     return 0;
 }
 
-static SysBusDeviceInfo sdhci_mm_info = {
-    .init = sdhci_mm_init,
-    .qdev.name  = "sdhci",
+static void sdhci_mm_class_init(ObjectClass *_klass, void *_obj)
+{
+	SysBusDeviceClass *sdc = SYS_BUS_DEVICE_CLASS(_klass);
+	sdc->init = sdhci_mm_init;
+}
+
+static TypeInfo sdhci_mm_info = {
+	.name 			= "sdhci",
+	.parent 		= TYPE_SYS_BUS_DEVICE,
+	.instance_size	= sizeof(sdhci_state),
+    .class_init 	= sdhci_mm_class_init,
+
+/*    .qdev.name  = "sdhci",
     .qdev.size  = sizeof(sdhci_state),
     .qdev.vmsd  = &sdhci_vmstate,
     .qdev.reset = sdhci_reset,
     .qdev.props = (Property[]) {
         DEFINE_PROP_DRIVE("block", sdhci_state, bs),
         DEFINE_PROP_END_OF_LIST(),
-    }
+		}*/
 };
 
 static int sdhci_pci_init(PCIDevice *dev)
@@ -604,8 +626,22 @@ static int sdhci_pci_init(PCIDevice *dev)
     return 0;
 }
 
-static PCIDeviceInfo sdhci_pci_info = {
-    .qdev.name    = "sdhci_pci",
+static void sdhci_pci_class_init(ObjectClass *_klass, void *_obj)
+{
+	PCIDeviceClass *k = PCI_DEVICE_CLASS(_klass);
+	k->init 		= sdhci_pci_init;
+	k->vendor_id 	= PCI_VENDOR_ID_QEMU;
+	k->device_id	= PCI_DEVICE_ID_SDHCI;
+	k->class_id		= PCI_CLASS_SYSTEM_SDHCI;
+}
+
+static TypeInfo sdhci_pci_info = {
+	.name 			= "sdhci_pci",
+	.parent			= TYPE_PCI_DEVICE,
+	.instance_size	= sizeof(sdhci_state),
+	.class_init		= sdhci_pci_class_init,
+
+/*    .qdev.name    = "sdhci_pci",
     .qdev.size    = sizeof(sdhci_state),
     .qdev.vmsd    = &sdhci_vmstate,
     .qdev.reset   = sdhci_reset,
@@ -616,13 +652,13 @@ static PCIDeviceInfo sdhci_pci_info = {
     .init         = sdhci_pci_init,
     .vendor_id    = PCI_VENDOR_ID_QEMU,
     .device_id    = PCI_DEVICE_ID_SDHCI,
-    .class_id     = PCI_CLASS_SYSTEM_SDHCI,
+    .class_id     = PCI_CLASS_SYSTEM_SDHCI,*/
 };
 
 static void sdhci_register(void)
 {
-    sysbus_register_withprop(&sdhci_mm_info);
-    pci_qdev_register(&sdhci_pci_info);
+	type_register_static(&sdhci_mm_info);
+	type_register_static(&sdhci_pci_info);
 }
 
-device_init(sdhci_register)
+type_init(sdhci_register)

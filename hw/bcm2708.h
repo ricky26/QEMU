@@ -102,8 +102,7 @@ struct bcm2708_state
 	struct bcm2708_dma dma;
 	
 	// ST
-	int st_count;
-	int st_next;
+	int st_int;
 	QEMUTimer *st_timer;
 
 	// ARMCTL
@@ -115,7 +114,7 @@ struct bcm2708_state
 };
 
 void bcm2708_init(struct bcm2708_state *_st,
-		CPUState *_env, MemoryRegion *_bus);
+		ARMCPU *_env, MemoryRegion *_bus);
 
 void bcm2708_shutdown(struct bcm2708_state *_st);
 

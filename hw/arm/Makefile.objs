@@ -35,6 +35,10 @@ obj-y += vexpress.o
 obj-y += strongarm.o
 obj-y += collie.o
 obj-y += pl041.o lm4549.o
+
+obj-y += raspberrypi.o bcm2708.o bcm2708_vc.o bcm2708_dma.o
+obj-y += usb_synopsys.o
+
 obj-$(CONFIG_FDT) += ../device_tree.o
 
 obj-y := $(addprefix ../,$(obj-y))

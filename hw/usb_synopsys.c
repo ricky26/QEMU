@@ -989,20 +989,21 @@ static int synopsys_usb_init(SysBusDevice *dev)
 	return 0;
 }
 
-static SysBusDeviceInfo synopsys_usb_info = {
-    .init = synopsys_usb_init,
-    .qdev.name  = DEVICE_NAME,
-    .qdev.size  = sizeof(synopsys_usb_state),
-    .qdev.reset = synopsys_usb_initial_reset,
-    .qdev.props = (Property[]) {
-		DEFINE_PROP_STRING("host", synopsys_usb_state, server_host),
-		DEFINE_PROP_UINT32("port", synopsys_usb_state, server_port, 7642),
-        DEFINE_PROP_END_OF_LIST(),
-    }
+static void synopsys_usb_class_init(ObjectClass *_klass, void *_data)
+{
+    SysBusDeviceClass *sdc = SYS_BUS_DEVICE_CLASS(_klass);
+    sdc->init = synopsys_usb_init;
+}
+
+static TypeInfo synopsys_usb_info = {
+	.name = DEVICE_NAME,
+	.parent = TYPE_SYS_BUS_DEVICE,
+    .class_init = synopsys_usb_class_init,
+	.instance_size = sizeof(synopsys_usb_state),
 };
 
 static void synopsys_usb_register(void)
 {
-    sysbus_register_withprop(&synopsys_usb_info);
+    type_register_static(&synopsys_usb_info);
 }
-device_init(synopsys_usb_register);
+type_init(synopsys_usb_register);

@@ -19,6 +19,18 @@
 
 // =============================
 // Unashamedly stolen from pl110
+enum bppmode
+{
+    BPP_1,
+    BPP_2,
+    BPP_4,
+    BPP_8,
+    BPP_16,
+    BPP_32,
+    BPP_16_565,
+    BPP_12
+};
+
 #include "pixel_ops.h"
 
 #define BITS 8
@@ -31,18 +43,6 @@
 #include "pl110_template.h"
 #define BITS 32
 #include "pl110_template.h"
-
-enum bppmode
-{
-    BPP_1,
-    BPP_2,
-    BPP_4,
-    BPP_8,
-    BPP_16,
-    BPP_32,
-    BPP_16_565, /* PL111 only */
-    BPP_12      /* PL111 only */
-};
 // =============================
 
 static void bcm2708_fb_update(void *_opaque)
@@ -85,7 +85,7 @@ static void bcm2708_fb_update(void *_opaque)
         exit(1);
     }
 
-    bpp_offset = 0;//24;
+    bpp_offset = 0;
     fn = fntable[vc->fb_bpp + bpp_offset];
 
     src_width = vc->fb.xres;
@@ -113,15 +113,17 @@ static void bcm2708_fb_update(void *_opaque)
 
     dest_width *= vc->fb.xres;
     first = 0;
-    framebuffer_update_display(vc->disp,
-								   vc->fb.base, vc->fb.xres, vc->fb.yres,
-								   src_width, dest_width, 0,
-								   vc->fb_invalidate,
-								   fn, NULL,
-								   &first, &last);
-    if (first >= 0) {
-        dpy_update(vc->disp, 0, first, vc->fb.xres, last - first + 1);
-    }
+
+	framebuffer_update_display(vc->disp, get_system_memory(),
+			vc->fb.base, vc->fb.xres, vc->fb.yres,
+			src_width, dest_width, 0,
+			vc->fb_invalidate,
+			fn, NULL,
+			&first, &last);
+	if (first >= 0) {
+		dpy_update(vc->disp, 0, first, vc->fb.xres, last - first + 1);
+	}
+
     vc->fb_invalidate = 0;
 }
 
@@ -179,20 +181,19 @@ static void bcm2708_vc_fb(struct bcm2708_vc *_vc,
 	target_phys_addr_t fbsz = pitch*_vc->fb.yres;
 	target_phys_addr_t addr = 128*1024*1024; // Currently hard-coded in kernel?
 
-#ifdef DEBUG_FB
-	printf("fb mapped to 0x%08x.\n", addr);
-#endif
-
 	_vc->fb_invalidate = 1;
 	_vc->fb.pitch = pitch;
 	_vc->fb.base = addr;
 	_vc->fb.screen_size = fbsz;
-	cpu_physical_memory_write(dma, &_vc->fb, sizeof(_vc->fb));
-
-
-	bcm2708_vc_send(_vc, _chan, 0);
 
 	qemu_console_resize(_vc->disp, _vc->fb.xres, _vc->fb.yres);
+
+#ifdef DEBUG_FB
+	printf("fb mapped to 0x%08x (%p).\n", addr, _vc->disp);
+#endif
+	
+	cpu_physical_memory_write(dma, &_vc->fb, sizeof(_vc->fb));
+	bcm2708_vc_send(_vc, _chan, 0);
 }
 
 static void bcm2708_vc_pm_req(struct bcm2708_vc *_vc,
