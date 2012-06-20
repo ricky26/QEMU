@@ -226,6 +226,7 @@ typedef struct {
     uint32_t int_enable;
     uint32_t int_status;
     uint32_t adma_address;
+	uint32_t txdone, txlen;
     uint8_t adma_error;
     SDState *sd;
     qemu_irq irq;
@@ -344,14 +345,26 @@ static void sdhci_command(sdhci_state *s, uint32_t cmd)
              */
             s->int_status |= SDHCI_INT_DATA_END;
         }
-        if ((s->transfer_mode & SDHCI_TRNS_DMA) && (cmd & SDHCI_CMD_DATA)) {
-            sdhci_dma_transfer(s);
+
+		if(cmd & SDHCI_CMD_DATA)
+		{
+			if(s->transfer_mode & SDHCI_TRNS_DMA)
+				sdhci_dma_transfer(s);
+			else
+			{
+				s->txdone = 0;
+				s->txlen = s->block_count*(s->block_size & 0xfff);
+				if (s->transfer_mode & SDHCI_TRNS_READ)
+					s->int_status |= SDHCI_INT_DATA_AVAIL;
+				else
+					s->int_status |= SDHCI_INT_SPACE_AVAIL;
+			}
         }
     }
     sdhci_set_irq(s);
 }
 
-static uint64_t sdhci_readl(void *opaque, target_phys_addr_t offset)
+static uint64_t sdhci_readl(void *opaque, target_phys_addr_t offset, unsigned size)
 {
     sdhci_state *s = opaque;
 
@@ -376,11 +389,54 @@ static uint64_t sdhci_readl(void *opaque, target_phys_addr_t offset)
     case SDHCI_RESPONSE+12:
         return s->response[(offset-SDHCI_RESPONSE)/sizeof(uint32_t)];
     case SDHCI_BUFFER:
-        /* TODO: implement PIO mode */
-        return 0;
+	    {
+			if(!sd_data_ready(s->sd))
+				return 0;
+			
+			uint32_t ret = 0;
+			unsigned i;
+			for(i = 0; i < size && s->txdone < s->txlen; i++)
+			{
+				ret |= sd_read_data(s->sd) << i*8;
+				s->txdone++;
+			}
+
+			if(s->txdone >= s->txlen)
+				s->int_status |= SDHCI_INT_DATA_END;
+			else if (s->transfer_mode & SDHCI_TRNS_READ)
+				s->int_status |= SDHCI_INT_DATA_AVAIL;
+			else
+				s->int_status |= SDHCI_INT_SPACE_AVAIL;
+
+			sdhci_set_irq(s);
+			return ret;
+		}
+        break;
     case SDHCI_PRESENT_STATE:
-        return (s->sd ? 0x00170000 : 0) |
-               (s->bs && bdrv_is_read_only(s->bs) ? 0 : 0x00080000);
+	    {
+			uint32_t ret;
+			if(s->sd)
+			{
+				ret = 0x00170000;
+				
+				if(sd_data_ready(s->sd))
+				{
+					if(s->transfer_mode & SDHCI_TRNS_READ)
+						ret |= SDHCI_DATA_AVAILABLE;
+					else
+						ret |= SDHCI_SPACE_AVAILABLE;
+				}
+			}
+			else
+				ret = 0;
+
+			if(s->bs && bdrv_is_read_only(s->bs))
+				ret |= SDHCI_WRITE_PROTECT;
+			
+			return ret;
+		}
+		break;
+
     case SDHCI_HOST_CONTROL:
         /*+SDHCI_POWER_CONTROL +SDHCI_BLOCK_GAP_CONTROL +SDHCI_WAKE_UP_CONTROL*/
         return s->host_control;
@@ -424,7 +480,7 @@ static uint64_t sdhci_read(void *_opaque,
 		target_phys_addr_t _offset, unsigned _sz)
 {
 	int off = (_offset & 3);
-	uint64_t data = sdhci_readl(_opaque, _offset &~ 3);
+	uint64_t data = sdhci_readl(_opaque, _offset &~ 3, _sz);
 	
 	return data >> (off << 3);
 }
@@ -458,7 +514,28 @@ static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
         }
         break;
     case SDHCI_BUFFER:
-        /* TODO: implement PIO mode */
+	    {
+			if(!sd_data_ready(s->sd))
+				break;
+
+			uint32_t msk = mask, dat = value;
+			while(msk && s->txdone < s->txlen)
+			{
+				sd_write_data(s->sd, dat & 0xff);
+				msk >>= 8;
+				dat >>= 8;
+				s->txdone++;
+			}
+
+			if(s->txlen >= s->txdone)
+				s->int_status |= SDHCI_INT_DATA_END;
+			else if (s->transfer_mode & SDHCI_TRNS_READ)
+				s->int_status |= SDHCI_INT_DATA_AVAIL;
+			else
+				s->int_status |= SDHCI_INT_SPACE_AVAIL;
+
+			sdhci_set_irq(s);
+		}
         break;
     case SDHCI_HOST_CONTROL:
         /*+SDHCI_POWER_CONTROL +SDHCI_BLOCK_GAP_CONTROL +SDHCI_WAKE_UP_CONTROL*/
@@ -524,9 +601,8 @@ static void sdhci_write(void *opaque, target_phys_addr_t offset,
 		uint64_t value, unsigned _sz)
 {
 	int off = (offset & 3)*8;
-	offset &=~ 3;
-
-    sdhci_write_masked(opaque, offset, value, ((1 << _sz)-1) << off);
+	uint32_t mask = (_sz < 4) ? ((1 << _sz*8)-1) : -1;
+    sdhci_write_masked(opaque, offset &~ 3, value << off, mask << off);
 }
 
 static const MemoryRegionOps sdhci_ops = {
