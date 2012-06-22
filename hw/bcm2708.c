@@ -487,12 +487,23 @@ static void armctl_init(struct bcm2708_state *_st,
 // System Timer
 // 
 
-#define ST_INT		0x00
-#define ST_CYCLES	0x04
-#define ST_NEXT		0x18
+#define ST_CONTROL	0x00
+#define ST_COUNTER	0x04
+#define ST_TIMER0	0x0c
+#define ST_TIMER1	0x10
+#define ST_TIMER2	0x14
+#define ST_TIMER3	0x18
 
-#define ST_INT_EXP	(1 << 3)
+#define ST_NUM_TIMERS 4
+
 #define ST_SCALE	SCALE_US
+
+static void st_update_irq(struct bcm2708_state *_state)
+{
+	int i;
+	for(i = 0; i < ST_NUM_TIMERS; i++)
+		qemu_set_irq(_state->irqs[IRQ_TIMER0 + i], !!(_state->st_control & (1 << i)));
+}
 
 static uint64_t st_read(void *_opaque,
 		target_phys_addr_t _addr, unsigned _sz)
@@ -501,10 +512,10 @@ static uint64_t st_read(void *_opaque,
 
 	switch(_addr)
 	{
-	case ST_INT:
-		return state->st_int;
+	case ST_CONTROL:
+		return state->st_control;
 		
-	case ST_CYCLES:
+	case ST_COUNTER:
 		return qemu_get_clock_ns(vm_clock)/ST_SCALE;
 
 	default:
@@ -522,16 +533,18 @@ static void st_write(void *_opaque,
 
 	switch(_addr)
 	{
-	case ST_INT:
-		state->st_int &=~ _data;
-		qemu_set_irq(state->irqs[IRQ_TIMER3], !!state->st_int);
+	case ST_CONTROL:
+		state->st_control &=~ _data;
+		st_update_irq(state);
 		break;
 
-	case ST_NEXT:
+	case ST_TIMER0...ST_TIMER3:
+		_addr -= ST_TIMER0;
+		
 #ifdef DEBUG_ST
-		printf("modded %u\n", (uint32_t)_data);
+		printf("modded %d: %u\n", _addr/4, (uint32_t)_data);
 #endif
-		qemu_mod_timer_ns(state->st_timer, _data);
+		qemu_mod_timer_ns(state->st_timers[_addr/4].timer, _data);
 		break;
 
 	default:
@@ -548,14 +561,15 @@ static const MemoryRegionOps st_ops = {
 
 static void st_tick(void *_opaque)
 {
-	struct bcm2708_state *state = _opaque;
+	struct bcm2708_timer *t = _opaque;
+	struct bcm2708_state *state = t->parent;
 
 #ifdef DEBUG_ST
-	printf("%s.\n", __func__);
+	printf("%s: %d.\n", __func__, t->index);
 #endif
 
-	state->st_int |= ST_INT_EXP;
-	qemu_irq_raise(state->irqs[IRQ_TIMER3]);
+	state->st_control |= (1 << t->index);
+	st_update_irq(state);
 }
 
 static void st_init(struct bcm2708_state *_state)
@@ -567,7 +581,15 @@ static void st_init(struct bcm2708_state *_state)
 	memory_region_add_subregion(_state->iomem,
 			ST_BASE, stmem);
 
-	_state->st_timer = qemu_new_timer(vm_clock, ST_SCALE, st_tick, _state);
+	int i;
+	for(i = 0; i < ST_NUM_TIMERS; i++)
+	{
+		struct bcm2708_timer *t = &_state->st_timers[i];
+		
+		t->parent = _state;
+		t->index = i;
+		t->timer = qemu_new_timer(vm_clock, ST_SCALE, st_tick, t);
+	}
 }
 
 //

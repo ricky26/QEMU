@@ -96,6 +96,14 @@ struct bcm2708_dma
 };
 
 // bcm2708 structs
+struct bcm2708_timer
+{
+	struct bcm2708_state *parent;
+	int index;
+
+	QEMUTimer *timer;
+};
+
 struct bcm2708_state
 {
 	MemoryRegion *iomem;
@@ -103,8 +111,8 @@ struct bcm2708_state
 	struct bcm2708_dma dma;
 	
 	// ST
-	int st_int;
-	QEMUTimer *st_timer;
+	int st_control;
+	struct bcm2708_timer st_timers[4];
 
 	// ARMCTL
 	uint32_t irqsts[3];
