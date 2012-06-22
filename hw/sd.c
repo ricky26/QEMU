@@ -415,6 +415,7 @@ static void sd_reset(SDState *sd, BlockDriverState *bdrv)
     if (sd->wp_groups)
         g_free(sd->wp_groups);
     sd->wp_switch = bdrv ? bdrv_is_read_only(bdrv) : 0;
+
     sd->wp_groups = (int *) g_malloc0(sizeof(int) * sect);
     memset(sd->function_group, 0, sizeof(int) * 6);
     sd->erase_start = 0;
@@ -1702,6 +1703,11 @@ uint8_t sd_read_data(SDState *sd)
 int sd_data_ready(SDState *sd)
 {
     return sd->state == sd_sendingdata_state;
+}
+
+int sd_write_ready(SDState *sd)
+{
+	return sd->state == sd_receivingdata_state;
 }
 
 void sd_enable(SDState *sd, int enable)

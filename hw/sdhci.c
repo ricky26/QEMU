@@ -423,18 +423,21 @@ static uint64_t sdhci_readl(void *opaque, target_phys_addr_t offset, unsigned si
 			{
 				ret = 0x00170000;
 				
-				if(sd_data_ready(s->sd))
+				if(s->transfer_mode & SDHCI_TRNS_READ)
 				{
-					if(s->transfer_mode & SDHCI_TRNS_READ)
+					if(sd_data_ready(s->sd))
 						ret |= SDHCI_DATA_AVAILABLE;
-					else
+				}	
+				else
+				{
+					if(sd_write_ready(s->sd))
 						ret |= SDHCI_SPACE_AVAILABLE;
 				}
 			}
 			else
 				ret = 0;
 
-			if(s->bs && bdrv_is_read_only(s->bs))
+			if(s->bs && !bdrv_is_read_only(s->bs))
 				ret |= SDHCI_WRITE_PROTECT;
 			
 			return ret;
@@ -519,7 +522,7 @@ static void sdhci_write_masked(void *opaque, target_phys_addr_t offset,
         break;
     case SDHCI_BUFFER:
 	    {
-			if(!sd_data_ready(s->sd))
+			if(!sd_write_ready(s->sd))
 				break;
 
 			uint32_t msk = mask, dat = value;
